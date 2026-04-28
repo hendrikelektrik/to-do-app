@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do App</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+        .form {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+        }
+        .form input, .form textarea {
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        .form textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        .form button {
+            width: 100%;
+            padding: 0.75rem;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        .form button:hover {
+            background: #45a049;
+        }
+        .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .task {
+            background: white;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        .task.completed .task-title {
+            text-decoration: line-through;
+            color: #888;
+        }
+        .task-checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #4CAF50;
+        }
+        .task-content {
+            flex: 1;
+        }
+        .task-title {
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+        .task-description {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .task-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .task-actions button {
+            padding: 0.4rem 0.8rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .edit-btn {
+            background: #2196F3;
+            color: white;
+        }
+        .delete-btn {
+            background: #f44336;
+            color: white;
+        }
+        .empty {
+            text-align: center;
+            color: #888;
+            padding: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>To-Do</h1>
+        
+        <div class="form">
+            <input type="text" id="titleInput" placeholder="Task title" maxlength="200" required>
+            <textarea id="descInput" placeholder="Description (optional)" maxlength="1000"></textarea>
+            <button onclick="createTask()">Add Task</button>
+        </div>
+        
+        <div id="taskList" class="task-list"></div>
+    </div>
+
+    <script>
+        const API_URL = '/tasks';
+        const MAX_TITLE_LENGTH = 200;
+        const MAX_DESC_LENGTH = 1000;
+        let isLoading = false;
+
+        function showError(msg) {
+            alert(msg);
+        }
+
+        function setLoading(loading) {
+            isLoading = loading;
+            document.body.style.cursor = loading ? 'wait' : 'default';
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function fetchTasks() {
+            try {
+                const res = await fetch(API_URL);
+                if (!res.ok) throw new Error('Failed to load tasks');
+                return await res.json();
+            } catch (e) {
+                showError(e.message);
+                return [];
+            }
+        }
+
+        async function createTask() {
+            const title = document.getElementById('titleInput').value.trim();
+            const description = document.getElementById('descInput').value.trim();
+            
+            if (!title) return showError('Title is required');
+            if (title.length > MAX_TITLE_LENGTH) return showError(`Title must be ${MAX_TITLE_LENGTH} characters or less`);
+            if (description.length > MAX_DESC_LENGTH) return showError(`Description must be ${MAX_DESC_LENGTH} characters or less`);
+
+            setLoading(true);
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, description })
+                });
+                if (!res.ok) throw new Error('Failed to create task');
+                
+                document.getElementById('titleInput').value = '';
+                document.getElementById('descInput').value = '';
+                renderTasks();
+            } catch (e) {
+                showError(e.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function updateTask(id, data) {
+            setLoading(true);
+            try {
+                const res = await fetch(`${API_URL}/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (!res.ok) throw new Error('Failed to update task');
+                renderTasks();
+            } catch (e) {
+                showError(e.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function deleteTask(id) {
+            if (!confirm('Delete this task?')) return;
+            setLoading(true);
+            try {
+                const res = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error('Failed to delete task');
+                renderTasks();
+            } catch (e) {
+                showError(e.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function renderTasks() {
+            setLoading(true);
+            try {
+                const tasks = await fetchTasks();
+                const container = document.getElementById('taskList');
+                
+                if (tasks.length === 0) {
+                    container.innerHTML = '<div class="empty">No tasks yet</div>';
+                    return;
+                }
+
+                container.innerHTML = tasks.map(task => `
+                    <div class="task ${task.completed ? 'completed' : ''}">
+                        <input type="checkbox" class="task-checkbox" 
+                            ${task.completed ? 'checked' : ''} 
+                            onchange="updateTask('${task.id}', {completed: this.checked})">
+                        <div class="task-content">
+                            <div class="task-title">${escapeHtml(task.title)}</div>
+                            ${task.description ? `<div class="task-description">${escapeHtml(task.description)}</div>` : ''}
+                        </div>
+                        <div class="task-actions">
+                            <button class="edit-btn" onclick="editTask('${task.id}', '${escapeHtml(task.title)}', '${escapeHtml(task.description || '')}')">Edit</button>
+                            <button class="delete-btn" onclick="deleteTask('${task.id}')">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function editTask(id, title, description) {
+            const newTitle = prompt('Edit title:', title);
+            if (newTitle === null || newTitle === title) return;
+            if (newTitle.length > MAX_TITLE_LENGTH) return showError(`Title must be ${MAX_TITLE_LENGTH} characters or less`);
+            const newDesc = prompt('Edit description:', description) || '';
+            if (newDesc.length > MAX_DESC_LENGTH) return showError(`Description must be ${MAX_DESC_LENGTH} characters or less`);
+            updateTask(id, { title: newTitle, description: newDesc });
+        }
+
+        document.getElementById('titleInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') createTask();
+        });
+
+        renderTasks();
+    </script>
+</body>
+</html>
